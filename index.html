@@ -3,32 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Приватная Голосовая Связь</title>
+    <title>Приватная Связь 1-на-1</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #121212; color: white; margin: 0; }
-        .card { background: #1e1e1e; padding: 2rem; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 320px; }
-        input { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #333; background: #252525; color: white; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; margin: 5px 0; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .btn-start { background: #4CAF50; color: white; }
-        .btn-call { background: #2196F3; color: white; }
+        .card { background: #1e1e1e; padding: 2rem; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 350px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; box-sizing: border-box; font-size: 1rem; }
+        .controls { display: grid; gap: 10px; margin-top: 10px; }
+        button { padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 0.9rem; transition: 0.3s; }
+        .btn-host { background: #4CAF50; color: white; } /* Зеленая - для того кто ждет */
+        .btn-call { background: #2196F3; color: white; } /* Синяя - для того кто звонит */
+        button:hover { opacity: 0.8; }
         button:disabled { background: #555; cursor: not-allowed; }
-        #status { margin-top: 15px; font-size: 0.9rem; color: #aaa; }
-        .online { color: #4CAF50 !important; }
+        #status { margin-top: 20px; font-size: 0.85rem; padding: 10px; border-radius: 5px; background: #2a2a2a; }
+        .online { color: #4CAF50; border: 1px solid #4CAF50; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>🔒 Voice Chat</h2>
-    <p>Введите общий пароль:</p>
-    <input type="password" id="password" placeholder="Ваш секретный код">
+    <h2>🔒 Voice Tunnel</h2>
+    <input type="password" id="password" placeholder="Общий секретный пароль">
     
-    <button id="start-btn" class="btn-start">1. Создать линию</button>
-    <button id="call-btn" class="btn-call" disabled>2. Позвонить другу</button>
+    <div class="controls">
+        <button id="host-btn" class="btn-host">Я жду звонка (Хост)</button>
+        <button id="call-btn" class="btn-call">Я звоню другу (Гость)</button>
+    </div>
 
-    <div id="status">Статус: Ожидание...</div>
-    
+    <div id="status">Введите пароль и выберите роль</div>
     <audio id="remote-audio" autoplay></audio>
 </div>
 
@@ -36,73 +38,69 @@
     let peer = null;
     let localStream = null;
     const statusEl = document.getElementById('status');
-    const startBtn = document.getElementById('start-btn');
-    const callBtn = document.getElementById('call-btn');
     const passwordInput = document.getElementById('password');
     const remoteAudio = document.getElementById('remote-audio');
 
-    // Хэшируем пароль немного, чтобы ID был сложнее (соль)
-    const getPeerId = (pass) => "vchat_room_" + btoa(pass).substring(0, 12);
+    // Функция для создания "безопасного" ID на основе пароля
+    const getPeerId = (pass) => "vchat_" + btoa(pass).substring(0, 16);
 
-    // 1. Инициализация связи
-    startBtn.onclick = async () => {
+    async function initMedia() {
+        if (!localStream) {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
+    }
+
+    // ЛОГИКА ХОСТА (Тот, кто принимает звонок)
+    document.getElementById('host-btn').onclick = async () => {
         const pass = passwordInput.value;
         if (!pass) return alert("Введите пароль!");
 
         try {
-            // Запрашиваем доступ к микрофону
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            
-            // Создаем подключение с ID на основе пароля
+            await initMedia();
+            // Хост занимает конкретный ID-пароль
             peer = new Peer(getPeerId(pass));
 
-            peer.on('open', (id) => {
-                statusEl.innerText = "Линия готова. Скажите другу этот же пароль.";
+            peer.on('open', () => {
+                statusEl.innerText = "Линия открыта. Друг может звонить.";
                 statusEl.classList.add('online');
-                startBtn.disabled = true;
-                callBtn.disabled = false;
+                document.querySelectorAll('button').forEach(b => b.disabled = true);
             });
 
-            // Обработка входящего звонка
             peer.on('call', (call) => {
-                statusEl.innerText = "Входящий звонок...";
-                call.answer(localStream); // Отвечаем своим голосом
-                call.on('stream', (stream) => {
-                    remoteAudio.srcObject = stream; // Слушаем друга
-                    statusEl.innerText = "В связи (разговор)";
-                });
+                statusEl.innerText = "Соединение установлено!";
+                call.answer(localStream);
+                call.on('stream', stream => remoteAudio.srcObject = stream);
             });
 
             peer.on('error', (err) => {
-                if(err.type === 'unavailable-id') {
-                    alert("Эта линия уже занята! Попробуйте другой пароль.");
-                } else {
-                    console.error(err);
-                    statusEl.innerText = "Ошибка: " + err.type;
-                }
+                if (err.type === 'unavailable-id') alert("Эта линия уже кем-то занята!");
+                else statusEl.innerText = "Ошибка: " + err.type;
             });
-
-        } catch (err) {
-            alert("Нужен доступ к микрофону!");
-        }
+        } catch (e) { alert("Микрофон недоступен"); }
     };
 
-    // 2. Функция звонка другу
-    callBtn.onclick = () => {
+    // ЛОГИКА ГОСТЯ (Тот, кто звонит)
+    document.getElementById('call-btn').onclick = async () => {
         const pass = passwordInput.value;
-        const friendId = getPeerId(pass);
-        
-        statusEl.innerText = "Вызываем...";
-        const call = peer.call(friendId, localStream);
+        if (!pass) return alert("Введите пароль!");
 
-        call.on('stream', (stream) => {
-            remoteAudio.srcObject = stream;
-            statusEl.innerText = "В связи (разговор)";
-        });
+        try {
+            await initMedia();
+            // Гость получает СЛУЧАЙНЫЙ ID, чтобы не конфликтовать с хостом
+            peer = new Peer(); 
 
-        call.on('error', (err) => {
-            statusEl.innerText = "Не удалось дозвониться.";
-        });
+            peer.on('open', () => {
+                statusEl.innerText = "Вызываем друга...";
+                const call = peer.call(getPeerId(pass), localStream);
+                
+                call.on('stream', stream => {
+                    remoteAudio.srcObject = stream;
+                    statusEl.innerText = "Вы в эфире!";
+                    statusEl.classList.add('online');
+                    document.querySelectorAll('button').forEach(b => b.disabled = true);
+                });
+            });
+        } catch (e) { alert("Микрофон недоступен"); }
     };
 </script>
 
