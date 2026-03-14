@@ -31,7 +31,7 @@
     </div>
 
     <div id="status">Введите пароль и выберите роль</div>
-    <audio id="remote-audio" autoplay></audio>
+    <audio id="remote-audio" autoplay playsinline style="width: 100%; margin-top: 10px;"></audio>
 </div>
 
 <script>
@@ -52,7 +52,8 @@
 
     // ЛОГИКА ХОСТА (Тот, кто принимает звонок)
     document.getElementById('host-btn').onclick = async () => {
-        const pass = passwordInput.value;
+    await remoteAudio.play().catch(e => console.log("Audio ready")); // Разблокировка
+    const pass = passwordInput.value;
         if (!pass) return alert("Введите пароль!");
 
         try {
@@ -81,6 +82,7 @@
 
     // ЛОГИКА ГОСТЯ (Тот, кто звонит)
     document.getElementById('call-btn').onclick = async () => {
+        await remoteAudio.play().catch(e => console.log("Audio ready")); // Разблокировка
         const pass = passwordInput.value;
         if (!pass) return alert("Введите пароль!");
 
